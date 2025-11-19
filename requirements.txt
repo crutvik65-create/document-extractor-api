@@ -4,4 +4,4 @@ google-generativeai==0.3.2
 Pillow==10.1.0
 pdf2image==1.16.3
 gunicorn==21.2.0
-pip install python-dotenv
+python-dotenv
