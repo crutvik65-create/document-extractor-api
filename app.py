@@ -100,6 +100,8 @@ def extract_cheque_with_gemini(image_path):
 8. **IFSC Code**: 11-character code (format: SBIN0001234)
 9. **MICR Code**: Bottom code with symbols - EXTRACT EXACTLY AS PRINTED WITH ALL SYMBOLS
    Example: "⑈343242⑈ 520002206⑆ 000860⑈ 24" or "230270• 143002341: 004052 31"
+10. **Bank Address**: Full bank branch address if visible   
+   
 
 **OPTIONAL FIELDS:**
 10. **PREFIX Number**: PREFIX account identifier if visible
@@ -125,6 +127,7 @@ Return ONLY valid JSON (no markdown, no explanations):
   "micr_code": "",
   "prefix_number": "",
   "branch_name": "",
+  "bank_address": "",
   "branch_code": ""
 }"""
     
@@ -138,6 +141,7 @@ Return ONLY valid JSON (no markdown, no explanations):
             json_text = json_text.split('```')[1].split('```')[0].strip()
         
         extracted = json.loads(json_text)
+        print(f"✓ Gemini extracted JSON: {extracted}")
         
         micr_code = extracted.get('micr_code', '')
         cheque_number = extract_cheque_number_from_micr(micr_code)
@@ -160,13 +164,14 @@ Return ONLY valid JSON (no markdown, no explanations):
             'cheque_number': cheque_number,
             'prefix_number': extracted.get('prefix_number', ''),
             'branch_name': extracted.get('branch_name', ''),
+            'bank_address': extracted.get('bank_address', ''),
             'branch_code': extracted.get('branch_code', ''),
             'extracted_at': datetime.now().isoformat()
         }
         
         print(f"✓ Extracted Account Holder: {result['account_holder_name']}")
-        print(f"✓ Extracted Payee: {result['payee_name']}")
-        print(f"✓ Extracted Amount: {result['amount_formatted']}")
+        
+       
         
         return result
         
@@ -200,11 +205,14 @@ def extract_passbook_with_gemini(image_path):
 8. **Date of Birth (D.O.B.)**: Birth date in DD/MM/YYYY format
 9. **Minor Status (MOP)**: SINGLE/MINOR status
 10. **Nominee Registration Number**: If visible
-11. **Branch Details:**
+11. **Bank Details:**
+    - Bank Name
     - Branch Name
     - Branch Code
     - IFSC Code
     - MICR Code
+    - SWIFT Code (if visible)
+    - IBAN (if visible)
 12. **Account Type**: Savings/Current
 13. **Date of Issue**: When passbook was issued (DD/MM/YYYY)
 14. **Date of Activation**: Account opening date if visible
@@ -228,10 +236,13 @@ Return ONLY valid JSON (no markdown, no explanations):
   "date_of_birth": "",
   "minor_status": "",
   "nominee_reg_number": "",
+  "bank_name": "",
   "branch_name": "",
   "branch_code": "",
   "ifsc_code": "",
   "micr_code": "",
+  "swift_code": "",
+  "iban": "",
   "account_type": "",
   "date_of_issue": "",
   "date_of_activation": ""
@@ -260,18 +271,22 @@ Return ONLY valid JSON (no markdown, no explanations):
             'date_of_birth': extracted.get('date_of_birth', ''),
             'minor_status': extracted.get('minor_status', ''),
             'nominee_reg_number': extracted.get('nominee_reg_number', ''),
+            'bank_name': extracted.get('bank_name', ''),
             'branch_name': extracted.get('branch_name', ''),
             'branch_code': extracted.get('branch_code', ''),
             'ifsc_code': extracted.get('ifsc_code', ''),
             'micr_code': extracted.get('micr_code', ''),
+            'swift_code': extracted.get('swift_code', ''),
+            'iban': extracted.get('iban', ''),
             'account_type': extracted.get('account_type', ''),
             'date_of_issue': extracted.get('date_of_issue', ''),
             'date_of_activation': extracted.get('date_of_activation', ''),
             'extracted_at': datetime.now().isoformat()
         }
         
-        print(f"✓ Extracted CIF: {result['cif_number']}")
+        print(f"✓ Extracted SWIFT: {result['swift_code']}")
         print(f"✓ Extracted Customer: {result['customer_name']}")
+        print(f"✓ Extracted Bank Name: {result['bank_name']}")
         
         return result
         
