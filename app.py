@@ -1,7 +1,6 @@
 """
-Flask Backend for Document Extractor (Cheque & Passbook)
+Flask Backend for Document Extractor (GST, Cheque & Passbook)
 Production-ready with environment variables - Backend Only
-Enhanced with document type validation
 """
 
 from flask import Flask, request, jsonify
@@ -39,78 +38,6 @@ genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-2.5-flash')
 
 # ==================== HELPER FUNCTIONS ====================
-
-def validate_document_type(image_path, expected_type):
-    """
-    Validate if the uploaded document matches the expected type
-    expected_type: 'cheque' or 'passbook'
-    Returns: (is_valid, detected_type)
-    """
-    print(f"🔍 Validating document type. Expected: {expected_type}")
-    
-    img = Image.open(image_path)
-    
-    prompt = """You are a document classifier. Analyze this image and determine what type of document it is.
-
-Classify the document into ONE of these categories:
-- "cheque" - if it's a bank cheque
-- "passbook" - if it's a bank passbook (cover page or inside pages)
-- "other" - if it's any other type of document
-
-Look for these indicators:
-**Cheque indicators:**
-- "Pay" or "PAY" text
-- MICR code at bottom (with special symbols)
-- Amount box
-- Date boxes
-- Signature line
-- Cheque number
-- "A/c No." or "Account Number"
-
-**Passbook indicators:**
-- "PASSBOOK" text
-- Account holder details (CIF, Customer Name)
-- Bank logo with branch details
-- Transaction entries (Date, Particulars, Withdrawals, Deposits, Balance columns)
-- "Date of Issue" or "Date of Activation"
-
-Return ONLY a single-word classification in this exact format:
-DOCUMENT_TYPE: cheque
-OR
-DOCUMENT_TYPE: passbook
-OR
-DOCUMENT_TYPE: other
-
-No explanations, no additional text."""
-    
-    try:
-        response = gemini_model.generate_content([prompt, img])
-        result_text = response.text.strip()
-        
-        # Extract document type from response
-        if "DOCUMENT_TYPE:" in result_text:
-            detected_type = result_text.split("DOCUMENT_TYPE:")[1].strip().lower()
-        else:
-            # Fallback: look for keywords in response
-            result_lower = result_text.lower()
-            if "cheque" in result_lower:
-                detected_type = "cheque"
-            elif "passbook" in result_lower:
-                detected_type = "passbook"
-            else:
-                detected_type = "other"
-        
-        print(f"✓ Detected document type: {detected_type}")
-        
-        is_valid = detected_type == expected_type.lower()
-        return is_valid, detected_type
-        
-    except Exception as e:
-        print(f"❌ Document validation error: {e}")
-        import traceback
-        traceback.print_exc()
-        # On error, assume invalid
-        return False, "unknown"
 
 def extract_cheque_number_from_micr(micr_code):
     """Extract 6-digit cheque number from MICR code (first segment)"""
@@ -272,7 +199,7 @@ def extract_passbook_with_gemini(image_path):
 2. **Account Number**: Full bank account number
 3. **Customer Name**: Account holder's full name
 4. **Father's/Husband's Name**: S/O, W/O, D/O details
-5. **BANK Address**: Complete address
+5. **Address**: Complete address
 6. **Phone**: Contact number
 7. **Email**: Email address if visible
 8. **Date of Birth (D.O.B.)**: Birth date in DD/MM/YYYY format
@@ -303,7 +230,7 @@ Return ONLY valid JSON (no markdown, no explanations):
   "account_number": "",
   "customer_name": "",
   "father_husband_name": "",
-  "bank_address": "",
+  "address": "",
   "phone": "",
   "email": "",
   "date_of_birth": "",
@@ -338,7 +265,7 @@ Return ONLY valid JSON (no markdown, no explanations):
             'account_number': extracted.get('account_number', ''),
             'customer_name': extracted.get('customer_name', ''),
             'father_husband_name': extracted.get('father_husband_name', ''),
-            'bank_address': extracted.get('bank_address', ''),
+            'address': extracted.get('address', ''),
             'phone': extracted.get('phone', ''),
             'email': extracted.get('email', ''),
             'date_of_birth': extracted.get('date_of_birth', ''),
@@ -370,7 +297,37 @@ Return ONLY valid JSON (no markdown, no explanations):
         return None
 
 
-# ==================== FLASK ROUTES ====================
+        
+  
+# ==================== ROUTES ====================
+
+@app.route('/')
+def index():
+    return jsonify({
+        'status': 'running',
+        'service': 'Document Extractor API',
+        'version': '2.0',
+        'message': 'API is running successfully',
+        'endpoints': {
+            'status': '/api/status',
+            'cheque': '/api/extract/cheque',
+            'gst': '/api/extract/gst',
+            'passbook': '/api/extract/passbook'
+        }
+    })
+
+@app.route('/api/status')
+def api_status():
+    return jsonify({
+        'status': 'running',
+        'service': 'Document Extractor API',
+        'version': '2.0',
+        'endpoints': {
+            'cheque': '/api/extract/cheque',
+            'gst': '/api/extract/gst',
+            'passbook': '/api/extract/passbook'
+        }
+    })
 
 @app.route('/api/extract/cheque', methods=['POST'])
 def process_cheque():
@@ -395,38 +352,15 @@ def process_cheque():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Convert PDF to image if needed
         if filepath.lower().endswith('.pdf'):
             images = convert_from_path(filepath, dpi=300)
             temp_img = f"{filepath}_page1.jpg"
             images[0].save(temp_img, 'JPEG')
-            validation_path = temp_img
+            data = extract_cheque_with_gemini(temp_img)
+            os.remove(temp_img)
         else:
-            validation_path = filepath
+            data = extract_cheque_with_gemini(filepath)
         
-        # VALIDATE DOCUMENT TYPE
-        is_valid, detected_type = validate_document_type(validation_path, 'cheque')
-        
-        if not is_valid:
-            # Clean up files
-            if filepath.lower().endswith('.pdf') and os.path.exists(validation_path):
-                os.remove(validation_path)
-            os.remove(filepath)
-            
-            return jsonify({
-                'success': False,
-                'error': 'Invalid document type',
-                'message': f'This endpoint only accepts cheque documents. Detected document type: {detected_type}',
-                'expected_type': 'cheque',
-                'detected_type': detected_type
-            }), 400
-        
-        # Extract cheque data
-        data = extract_cheque_with_gemini(validation_path)
-        
-        # Clean up temporary files
-        if filepath.lower().endswith('.pdf') and os.path.exists(validation_path):
-            os.remove(validation_path)
         os.remove(filepath)
         
         if not data:
@@ -476,38 +410,15 @@ def process_passbook():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Convert PDF to image if needed
         if filepath.lower().endswith('.pdf'):
             images = convert_from_path(filepath, dpi=300)
             temp_img = f"{filepath}_page1.jpg"
             images[0].save(temp_img, 'JPEG')
-            validation_path = temp_img
+            data = extract_passbook_with_gemini(temp_img)
+            os.remove(temp_img)
         else:
-            validation_path = filepath
+            data = extract_passbook_with_gemini(filepath)
         
-        # VALIDATE DOCUMENT TYPE
-        is_valid, detected_type = validate_document_type(validation_path, 'passbook')
-        
-        if not is_valid:
-            # Clean up files
-            if filepath.lower().endswith('.pdf') and os.path.exists(validation_path):
-                os.remove(validation_path)
-            os.remove(filepath)
-            
-            return jsonify({
-                'success': False,
-                'error': 'Invalid document type',
-                'message': f'This endpoint only accepts passbook documents. Detected document type: {detected_type}',
-                'expected_type': 'passbook',
-                'detected_type': detected_type
-            }), 400
-        
-        # Extract passbook data
-        data = extract_passbook_with_gemini(validation_path)
-        
-        # Clean up temporary files
-        if filepath.lower().endswith('.pdf') and os.path.exists(validation_path):
-            os.remove(validation_path)
         os.remove(filepath)
         
         if not data:
