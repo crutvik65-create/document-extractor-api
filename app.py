@@ -370,35 +370,7 @@ Return ONLY valid JSON (no markdown, no explanations):
         return None
 
 
-        
-  
-# ==================== ROUTES ====================
-
-@app.route('/')
-def index():
-    return jsonify({
-        'status': 'running',
-        'service': 'Document Extractor API',
-        'version': '2.1',
-        'message': 'API is running successfully',
-        'endpoints': {
-            'status': '/api/status',
-            'cheque': '/api/extract/cheque',
-            'passbook': '/api/extract/passbook'
-        }
-    })
-
-@app.route('/api/status')
-def api_status():
-    return jsonify({
-        'status': 'running',
-        'service': 'Document Extractor API',
-        'version': '2.1',
-        'endpoints': {
-            'cheque': '/api/extract/cheque',
-            'passbook': '/api/extract/passbook'
-        }
-    })
+# ==================== FLASK ROUTES ====================
 
 @app.route('/api/extract/cheque', methods=['POST'])
 def process_cheque():
