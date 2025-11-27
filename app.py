@@ -217,7 +217,7 @@ INSTRUCTIONS:
 Return ONLY this JSON structure with no additional text:
 {
   "registration_number": "",
-  "legal_name": "",
+  "legalname": "",
   "trade_name": "",
   "constitution": "",
   "floor_number": "",
@@ -296,7 +296,7 @@ Return ONLY this JSON structure with no additional text:
         result = {
             'document_type': 'gst',
             'registration_number': extracted.get('registration_number', ''),
-            'legal_name': extracted.get('legal_name', ''),
+            'legalname': extracted.get('legalname', ''),
             'trade_name': extracted.get('trade_name', ''),
             'constitution': extracted.get('constitution', ''),
             'full_address': full_address,
@@ -315,7 +315,7 @@ Return ONLY this JSON structure with no additional text:
         }
         
         print(f"✓ Extracted GSTIN: {result['registration_number']}")
-        print(f"✓ Extracted Legal Name: {result['legal_name']}")
+        print(f"✓ Extracted Legal Name: {result['legalname']}")
         print(f"✓ Extracted City: {result['city']}, State: {result['state']}")
         
         return result
