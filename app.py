@@ -299,7 +299,7 @@ Return ONLY this JSON structure with no additional text:
             'legal_name': extracted.get('legal_name', ''),
             'trade_name': extracted.get('trade_name', ''),
             'constitution': extracted.get('constitution', ''),
-            'address': full_address,
+            'full_address': full_address,
             'city': extracted.get('city', ''),
             'district': extracted.get('district', ''),
             'state': extracted.get('state', ''),
