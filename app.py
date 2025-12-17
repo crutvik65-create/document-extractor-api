@@ -2,6 +2,7 @@
 Flask Backend for Document Extractor (Cheque & Passbook)
 Production-ready with environment variables - Backend Only
 Enhanced with document type validation
+Uses gemini-2.5-flash for extraction and gemini-2.5-flash-lite for validation
 """
 
 from flask import Flask, request, jsonify
@@ -13,6 +14,8 @@ import google.generativeai as genai
 from PIL import Image
 from pdf2image import convert_from_path
 import re
+import time
+from google.api_core.exceptions import DeadlineExceeded, ResourceExhausted
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -34,16 +37,19 @@ CORS(app)  # Enable CORS for all routes
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
-# Initialize Gemini
+# Initialize Gemini Models
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')  # For extraction (main task)
+gemini_lite_model = genai.GenerativeModel('gemini-2.0-flash-lite')  # For validation (faster, cheaper)
+
 
 
 # ==================== HELPER FUNCTIONS ====================
 
-def validate_document_type(image_path, expected_type):
+def validate_document_type(image_path, expected_type, max_retries=3):
     """
-    Validate if the uploaded document matches the expected type
+    Validate if the uploaded document matches the expected type with retry logic
+    Uses gemini-2.5-flash-lite for faster validation
     expected_type: 'cheque', 'passbook', or 'gst'
     Returns: (is_valid, detected_type)
     """
@@ -99,36 +105,53 @@ DOCUMENT_TYPE: other
 
 No explanations, no additional text."""
     
-    try:
-        response = gemini_model.generate_content([prompt, img])
-        result_text = response.text.strip()
-        
-        # Extract document type from response
-        if "DOCUMENT_TYPE:" in result_text:
-            detected_type = result_text.split("DOCUMENT_TYPE:")[1].strip().lower()
-        else:
-            # Fallback: look for keywords in response
-            result_lower = result_text.lower()
-            if "gst" in result_lower:
-                detected_type = "gst"
-            elif "cheque" in result_lower:
-                detected_type = "cheque"
-            elif "passbook" in result_lower:
-                detected_type = "passbook"
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Validation attempt {attempt + 1}/{max_retries} using gemini-2.0-flash-lite")
+            
+            # Use LITE model for validation (faster, cheaper)
+            response = gemini_lite_model.generate_content([prompt, img])
+            result_text = response.text.strip()
+            
+            # Extract document type from response
+            if "DOCUMENT_TYPE:" in result_text:
+                detected_type = result_text.split("DOCUMENT_TYPE:")[1].strip().lower()
             else:
-                detected_type = "other"
-        
-        print(f"✓ Detected document type: {detected_type}")
-        
-        is_valid = detected_type == expected_type.lower()
-        return is_valid, detected_type
-        
-    except Exception as e:
-        print(f"❌ Document validation error: {e}")
-        import traceback
-        traceback.print_exc()
-        # On error, assume invalid
-        return False, "unknown"
+                # Fallback: look for keywords in response
+                result_lower = result_text.lower()
+                if "gst" in result_lower:
+                    detected_type = "gst"
+                elif "cheque" in result_lower:
+                    detected_type = "cheque"
+                elif "passbook" in result_lower:
+                    detected_type = "passbook"
+                else:
+                    detected_type = "other"
+            
+            print(f"✓ Detected document type: {detected_type}")
+            
+            is_valid = detected_type == expected_type.lower()
+            return is_valid, detected_type
+            
+        except (DeadlineExceeded, ResourceExhausted) as e:
+            print(f"⚠️ Attempt {attempt + 1} failed: {str(e)}")
+            
+            if attempt < max_retries - 1:
+                # Exponential backoff: 2s, 4s, 8s
+                wait_time = 2 ** (attempt + 1)
+                print(f"⏳ Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print(f"❌ All {max_retries} validation attempts failed")
+                # Return False but allow processing to continue
+                return False, "timeout"
+                
+        except Exception as e:
+            print(f"❌ Document validation error: {e}")
+            import traceback
+            traceback.print_exc()
+            # On unexpected error, assume invalid
+            return False, "unknown"
 
 def extract_cheque_number_from_micr(micr_code):
     """Extract 6-digit cheque number from MICR code (first segment)"""
@@ -710,6 +733,7 @@ def process_cheque():
 
 
 
+
 @app.route('/api/extract/passbook', methods=['POST'])
 def process_passbook():
     try:
@@ -790,5 +814,6 @@ def process_passbook():
         }), 500
 
 if __name__ == '__main__':
+    print("Gemini key loaded:", GEMINI_API_KEY[:10], "****")
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=False)
