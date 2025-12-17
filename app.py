@@ -39,8 +39,8 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
 # Initialize Gemini Models
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')  # For extraction (main task)
-gemini_lite_model = genai.GenerativeModel('gemini-2.0-flash-lite')  # For validation (faster, cheaper)
+gemini_model = genai.GenerativeModel('gemini-2.0-flash')  # For extraction (main task)
+gemini_lite_model = genai.GenerativeModel('gemini-2.5-flash')  # For validation (faster, cheaper)
 
 
 
@@ -130,9 +130,18 @@ No explanations, no additional text."""
             
             print(f"✓ Detected document type: {detected_type}")
             
-            is_valid = detected_type == expected_type.lower()
-            return is_valid, detected_type
-            
+            # CONFIDENT match
+            if detected_type == expected_type.lower():
+                return True, detected_type
+
+            # CONFIDENT mismatch → reject
+            if detected_type in ("cheque", "passbook", "gst"):
+                return False, detected_type
+
+            # Anything else → NOT confident → allow extraction
+            print("⚠️ Validation not confident — allowing extraction")
+            return True, "uncertain"
+
         except (DeadlineExceeded, ResourceExhausted) as e:
             print(f"⚠️ Attempt {attempt + 1} failed: {str(e)}")
             
@@ -144,7 +153,7 @@ No explanations, no additional text."""
             else:
                 print(f"❌ All {max_retries} validation attempts failed")
                 # Return False but allow processing to continue
-                return False, "timeout"
+                return True, "timeout"
                 
         except Exception as e:
             print(f"❌ Document validation error: {e}")
