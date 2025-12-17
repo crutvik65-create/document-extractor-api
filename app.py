@@ -580,6 +580,9 @@ Return ONLY valid JSON (no markdown, no explanations):
 
 
 # ==================== FLASK ROUTES ====================
+@app.route("/", methods=["GET", "HEAD"])
+def health():
+    return "OK", 200
 
 @app.route('/api/extract/gst', methods=['POST'])
 def process_gst():
