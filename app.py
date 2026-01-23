@@ -1,9 +1,4 @@
-"""
-Flask Backend for Document Extractor (Cheque & Passbook)
-Production-ready with environment variables - Backend Only
-Enhanced with document type validation
-Uses gemini-2.5-flash for extraction and gemini-2.5-flash-lite for validation
-"""
+
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -39,7 +34,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
 # Initialize Gemini Models
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-2.0-flash')  # For extraction (main task)
+gemini_model = genai.GenerativeModel('gemini-2.5-flash-lite')  # For extraction (main task)
 gemini_lite_model = genai.GenerativeModel('gemini-2.5-flash')  # For validation (faster, cheaper)
 
 
@@ -107,8 +102,8 @@ No explanations, no additional text."""
     
     for attempt in range(max_retries):
         try:
-            print(f"🔄 Validation attempt {attempt + 1}/{max_retries} using gemini-2.0-flash-lite")
-            
+            print(f"🔄 Validation attempt {attempt + 1}/{max_retries} using gemini-2.5-flash")
+
             # Use LITE model for validation (faster, cheaper)
             response = gemini_lite_model.generate_content([prompt, img])
             result_text = response.text.strip()
