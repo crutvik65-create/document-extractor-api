@@ -1,5 +1,3 @@
-
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
@@ -129,13 +127,21 @@ No explanations, no additional text."""
             if detected_type == expected_type.lower():
                 return True, detected_type
 
-            # CONFIDENT mismatch → reject
-            if detected_type in ("cheque", "passbook", "gst"):
+            # CONFIDENT mismatch → reject (including "other")
+            if detected_type in ("cheque", "passbook", "gst", "other"):
                 return False, detected_type
 
-            # Anything else → NOT confident → allow extraction
-            print("⚠️ Validation not confident — allowing extraction")
-            return True, "uncertain"
+            # Only if truly uncertain (shouldn't happen with improved prompt) → retry
+            print("⚠️ Validation uncertain — will retry")
+            if attempt < max_retries - 1:
+                wait_time = 2 ** (attempt + 1)
+                print(f"⏳ Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+            else:
+                # After all retries, if still uncertain, reject for safety
+                print("❌ Could not confidently identify document type after retries")
+                return False, "uncertain"
 
         except (DeadlineExceeded, ResourceExhausted) as e:
             print(f"⚠️ Attempt {attempt + 1} failed: {str(e)}")
@@ -147,15 +153,18 @@ No explanations, no additional text."""
                 time.sleep(wait_time)
             else:
                 print(f"❌ All {max_retries} validation attempts failed")
-                # Return False but allow processing to continue
-                return True, "timeout"
+                # Return False to reject when timeout occurs
+                return False, "timeout"
                 
         except Exception as e:
             print(f"❌ Document validation error: {e}")
             import traceback
             traceback.print_exc()
-            # On unexpected error, assume invalid
+            # On unexpected error, reject for safety
             return False, "unknown"
+    
+    # Should never reach here, but if it does, reject
+    return False, "unknown"
 
 def extract_cheque_number_from_micr(micr_code):
     """Extract 6-digit cheque number from MICR code (first segment)"""
